@@ -13,11 +13,11 @@ CREATE TABLE Players (
 USE fb;
 GO
 
--- 1️⃣ Drop the old table completely
+
 DROP TABLE IF EXISTS PlayerStats;
 GO
 
--- 2️⃣ Recreate it with your new column names
+
 CREATE TABLE PlayerStats (
     StatID INT IDENTITY(1,1) PRIMARY KEY,
     PlayerID INT FOREIGN KEY REFERENCES Players(PlayerID),
