@@ -1,0 +1,174 @@
+
+CREATE TABLE Players (
+    PlayerID INT IDENTITY(1,1) PRIMARY KEY ,
+    Player_Name NVARCHAR(100),
+    Nation NVARCHAR(50),
+    Pos NVARCHAR(50),
+    Age FLOAT,
+    Squad NVARCHAR(50),
+    Comp NVARCHAR(50)
+);
+
+
+USE fb;
+GO
+
+-- 1️⃣ Drop the old table completely
+DROP TABLE IF EXISTS PlayerStats;
+GO
+
+-- 2️⃣ Recreate it with your new column names
+CREATE TABLE PlayerStats (
+    StatID INT IDENTITY(1,1) PRIMARY KEY,
+    PlayerID INT FOREIGN KEY REFERENCES Players(PlayerID),
+    Matches INT,
+    Starts INT,
+    Mins INT,
+    Goals INT,
+    Assist INT,
+    ExpectedGoals FLOAT,
+    ExpectedAssists FLOAT,
+    nonpenaltygoals INT,
+    npxG FLOAT,
+    keypasses INT,
+    Tackles INT,
+    Interception INT,
+    Clearences INT,
+    Blocks INT,
+    Errors INT,
+    Goalsconceded INT,
+    ProgressivePasses INT,
+    ProgressiveCarries INT,
+    PassCompletion FLOAT,
+    Ppa FLOAT,
+    Touches INT,
+    Recoveries INT,
+    Dispossesed INT
+);
+GO
+
+CREATE TABLE Teams(
+team_id INT IDENTITY(1,1) PRIMARY KEY,
+Squad NVARCHAR(50),
+Comp NVARCHAR(50),
+); 
+
+
+INSERT INTO Players (Player_Name, Nation, Pos, Age, Squad, Comp)
+SELECT r.Player, r.Nation, r.Pos, r.Age, r.Squad, r.Comp
+FROM [dbo].[players_data-2025_2026] as r;
+
+
+SELECT TOP 10 * FROM Players;
+SELECT TABLE_SCHEMA, TABLE_NAME
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_TYPE = 'BASE TABLE';
+INSERT INTO PlayerStats (
+    PlayerID, 
+    Matches, Starts, Mins, Goals, Assist, ExpectedGoals, ExpectedAssists, 
+    nonpenaltygoals, npxG, keypasses, Tackles, Interception, Clearences, 
+    Blocks, Errors, Goalsconceded, ProgressivePasses, ProgressiveCarries, 
+    PassCompletion, Ppa, Touches, Recoveries, Dispossesed
+)
+SELECT 
+    p.PlayerID,
+    r.MP, 
+    r.Starts,
+    r.Min,
+    r.Gls,
+    r.Ast,
+    r.xG,
+    r.xA,
+    r.G_PK,              -- assuming this is non-penalty goals
+    r.npxG,
+    r.KP,
+    r.Tkl,
+    r.Int,
+    r.Clr,
+    r.Blocks,
+    r.Err,
+    r.GA,
+    r.PrgP,
+    r.PrgC,
+    r.Cmp1,              -- this looks like pass completion %
+    r.PPA,
+    r.Touches,
+    r.Recov,
+    r.Dis
+FROM [dbo].[players_data-2025_2026] AS r
+JOIN Players AS p
+ON r.Player = p.Player_Name 
+AND r.Squad = p.Squad;
+
+SELECT * FROM PlayerStats
+SELECT COLUMN_NAME 
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'PlayerStats' ;
+
+CREATE View Offensive_Stats as 
+With per90 as (
+SELECT p.PlayerID,
+p.Player_Name,
+p.Pos,
+p.Squad,
+p.Comp,
+ps.Mins,
+CASE WHEN ps.Mins > 0 THEN ps.Goals * 90 / ps.Mins ELSE 0 END AS Goals_per_90,
+CASE WHEN ps.Mins > 0 THEN ps.Assist * 90 / ps.Mins Else 0 END AS Assists_per_90, 
+CASE WHEN ps.Mins > 0 THEN ExpectedGoals * 90/ ps.Mins Else 0 END AS ExpectedGoals_per_90, 
+CASE WHEN ps.Mins > 0 THEN ExpectedAssists * 90/ ps.Mins Else 0 END AS ExpectedAssists_per_90, 
+CASE WHEN ps.Mins > 0 THEN keypasses * 90/ ps.Mins Else 0 END AS keypasses_per_90,
+CASE WHEN ps.Mins > 0 THEN ProgressivePasses * 90/ ps.Mins Else 0 END AS ProgressivePasses_per_90, 
+CASE WHEN ps.Mins > 0 THEN ProgressiveCarries * 90/ ps.Mins Else 0 END AS ProgressiveCarries_per_90 
+FROM PlayerStats as ps 
+JOIN Players as p
+ON p.PlayerID = ps.PlayerID
+WHERE ps.Mins IS NOT NULL AND ps.Mins > 0 AND ps.Mins >= 200
+),
+
+
+norm AS (
+SELECT *,
+CASE WHEN MAX(Goals_per_90) OVER (PARTITION BY Pos) - MIN(Goals_per_90) OVER (PARTITION BY Pos) = 0 
+THEN  0 
+ELSE(Goals_per_90 -MIN(Goals_per_90) OVER (PARTITION BY Pos)) / NULLIF (MAX(Goals_per_90) OVER (PARTITION BY Pos) - MIN(Goals_per_90) OVER(PARTITION BY Pos),0) 
+END AS Goals_per_90_norm, 
+
+CASE WHEN MAX(Assists_per_90) OVER (PARTITION BY Pos) - MIN(Assists_per_90) OVER (PARTITION BY Pos) = 0 
+THEN  0 
+ELSE(Assists_per_90 -MIN(Assists_per_90) OVER (PARTITION BY Pos)) / NULLIF (MAX(Assists_per_90) OVER (PARTITION BY Pos) - MIN(Assists_per_90) OVER(PARTITION BY Pos),0) 
+END AS Assists_per_90_norm,
+
+CASE WHEN MAX(ExpectedGoals_per_90) OVER (PARTITION BY Pos) - MIN(ExpectedGoals_per_90) OVER (PARTITION BY Pos) = 0 
+THEN  0 
+ELSE(ExpectedGoals_per_90 -MIN(ExpectedGoals_per_90) OVER (PARTITION BY Pos)) / NULLIF (MAX(ExpectedGoals_per_90) OVER (PARTITION BY Pos) - MIN(ExpectedGoals_per_90) OVER(PARTITION BY Pos),0) 
+END AS ExpectedGoals_per_90_norm,
+
+CASE WHEN MAX(ExpectedAssists_per_90) OVER (PARTITION BY Pos) - MIN(ExpectedAssists_per_90) OVER (PARTITION BY Pos) = 0 
+THEN  0 
+ELSE(ExpectedAssists_per_90 -MIN(ExpectedAssists_per_90) OVER (PARTITION BY Pos)) / NULLIF (MAX(ExpectedAssists_per_90) OVER (PARTITION BY Pos) - MIN(ExpectedAssists_per_90) OVER(PARTITION BY Pos),0) 
+END AS ExpectedAssists_per_90_norm,
+
+
+CASE WHEN MAX(keypasses_per_90) OVER (PARTITION BY Pos) - MIN(keypasses_per_90) OVER (PARTITION BY Pos) = 0 
+THEN  0 
+ELSE(keypasses_per_90 -MIN(keypasses_per_90) OVER (PARTITION BY Pos)) / NULLIF (MAX(keypasses_per_90) OVER (PARTITION BY Pos) - MIN(keypasses_per_90) OVER(PARTITION BY Pos),0) 
+END AS keypasses_per_90_norm,
+
+CASE WHEN MAX(ProgressivePasses_per_90) OVER (PARTITION BY Pos) - MIN(ProgressivePasses_per_90) OVER (PARTITION BY Pos) = 0 
+THEN  0 
+ELSE(ProgressivePasses_per_90 -MIN(ProgressivePasses_per_90) OVER (PARTITION BY Pos)) / NULLIF (MAX(ProgressivePasses_per_90) OVER (PARTITION BY Pos) - MIN(ProgressivePasses_per_90) OVER(PARTITION BY Pos),0) 
+END AS ProgressivePasses_per_90_norm,
+
+CASE WHEN MAX(ProgressiveCarries_per_90) OVER (PARTITION BY Pos) - MIN(ProgressiveCarries_per_90) OVER (PARTITION BY Pos) = 0 
+THEN  0 
+ELSE(ProgressiveCarries_per_90 -MIN(ProgressiveCarries_per_90) OVER (PARTITION BY Pos)) / NULLIF (MAX(ProgressiveCarries_per_90) OVER (PARTITION BY Pos) - MIN(ProgressiveCarries_per_90) OVER(PARTITION BY Pos),0) 
+END AS ProgressiveCarries_per_90_norm
+FROM per90
+)
+SELECT  *, ((Goals_per_90_norm + Assists_per_90_norm + ExpectedGoals_per_90_norm + ExpectedAssists_per_90_norm + keypasses_per_90_norm + ProgressivePasses_per_90_norm + ProgressiveCarries_per_90_norm )) AS Offensive_Toal ,
+DENSE_RANK () OVER(PARTITION BY Pos ORDER BY (Goals_per_90_norm + Assists_per_90_norm + ExpectedGoals_per_90_norm + ExpectedAssists_per_90_norm + keypasses_per_90_norm + ProgressivePasses_per_90_norm + ProgressiveCarries_per_90_norm)DESC) AS Offensive_Rank
+FROM norm ;
+GO 
+
+SELECT * FROM Offensive_Stats;
