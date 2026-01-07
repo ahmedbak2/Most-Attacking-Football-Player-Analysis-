@@ -97,6 +97,9 @@ Dynamic Player Cards – Highlight the top offensive Forward, Midfielder, and De
 Offensive Summary Metrics –
 Goals/90 • Assists/90 • xG/90 • xA/90 • Key Passes/90
 
+<img width="1298" height="722" alt="image" src="https://github.com/user-attachments/assets/4fce9e45-b644-4eb1-bf88-c8729da80d61" />
+
+
 Visual Components:
 
 Scatter Plot – Goals vs Assists (bubble = Offensive Total)
